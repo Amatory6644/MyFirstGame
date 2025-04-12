@@ -4,12 +4,11 @@
     android:layout_height="match_parent"
     android:background="@drawable/background">
 
-    <View
-        android:id="@+id/square"
-        android:layout_width="50dp"
-        android:layout_height="50dp"
-        android:layout_centerInParent="true"
-        android:background="@android:color/holo_blue_light" />
+    <com.example.myapplication.GameView
+        android:id="@+id/game_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
 
     <com.example.myapplication.JoystickView
         android:id="@+id/joystick"
@@ -17,19 +16,5 @@
         android:layout_height="300dp"
         android:layout_alignParentBottom="true"
         android:layout_alignParentStart="true" />
-    <Button
-        android:id="@+id/connect_button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:text="Подключиться к WebSocket" />
-
-    <ImageView
-        android:id="@+id/player_image"
-        android:layout_width="100dp"
-        android:layout_height="100dp"
-        android:src="@drawable/main_skin"
-        android:layout_centerInParent="true"/> <!-- Укажите корректное изображение, замените на своё -->
 
 </RelativeLayout>

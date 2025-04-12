@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">My Application</string>
+    <string name="login">Login</string>
+    <string name="password">Password</string>
+    <string name="Entry">Вход</string>
+    <string name="registration">Зарегистрироваться</string>
+    <string name="party">Party</string>
+    <string name="start">Start</string>
+    <string name="invite">Invite</string>
+    <string name="play">Play</string>
+    <string name="Input_login_player">Введите логин игрока, которого хотите пригласить</string>
 </resources>

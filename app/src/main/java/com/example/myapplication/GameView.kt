@@ -1,124 +1,158 @@
 package com.example.myapplication
 
-
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.view.MotionEvent
-import android.view.SurfaceHolder
+import android.util.AttributeSet
+import android.util.Log
 import android.view.SurfaceView
+import java.util.concurrent.CopyOnWriteArrayList
 
-
-
-class GameView(context: Context) : SurfaceView(context), Runnable, SurfaceHolder.Callback {
-    private val paint: Paint = Paint()
-    private var isRunning = false
+class GameView(context: Context, attrs: AttributeSet? = null) : SurfaceView(context, attrs),
+    Runnable {
+    val globalLogin = LoginActivite().publicLogin
+    private val otherPlayerData = CopyOnWriteArrayList<PlayerData>()
     private lateinit var thread: Thread
-    var playerX = 100f
-    var playerY = 100f
-    var playerSize = 50f
+    private var isPlaying = true
+    private val paint = Paint()
+    private val bullets = CopyOnWriteArrayList<Bullet>()
 
-    private var joystickCenterX = 300f
-    private var joystickCenterY = 300f
-    private var joystickRadius = 100f
-    private var joystickStickX = joystickCenterX
-    private var joystickStickY = joystickCenterY
 
-    // Переменные для направления движения
-    private var moveDirectionX = 0f
-    private var moveDirectionY = 0f
-
-    // Фиксированная скорость движения
-    private val playerSpeed = 10f
+    var playerX = 0f // Начальная позиция игрока по X
+    var playerY = 0f // Начальная позиция игрока по Y
+    private val playerColor = Color.BLUE // Цвет вашего игрока
+    private val otherPlayerColor = Color.GREEN // Цвет других игроков
+    private lateinit var mapTexture: Bitmap
+    private lateinit var gameMap: Rug
 
     init {
-        paint.color = Color.WHITE
-        paint.style = Paint.Style.FILL
-        holder.addCallback(this) // Добавляем SurfaceHolder.Callback
+        mapTexture = BitmapFactory.decodeResource(resources, R.drawable.background)
+        gameMap = Rug(x = 0f, y = 0f, width = 1000f, height = 1000f, bitmap = mapTexture)
     }
 
     override fun run() {
-        while (isRunning) {
-            update()
-            draw()
-        }
-    }
-
-    private fun update() {
-        // Обновление позиции персонажа в зависимости от направления движения
-        playerX += moveDirectionX
-        playerY += moveDirectionY
-    }
-
-    private fun draw() {
-        val canvas: Canvas? = holder.lockCanvas()
-        if (canvas != null) {
+        while (isPlaying) {
+            drawGame()
             try {
-                canvas.drawColor(Color.BLACK)
-                canvas.drawRect(playerX, playerY, playerX + playerSize, playerY + playerSize, paint)
-
-                // Рисуем джойстик
-                paint.color = Color.GRAY
-                canvas.drawCircle(joystickCenterX, joystickCenterY, joystickRadius, paint)
-
-                paint.color = Color.RED
-                canvas.drawCircle(joystickStickX, joystickStickY, joystickRadius / 3, paint)
-            } finally {
-                holder.unlockCanvasAndPost(canvas)
+                Thread.sleep(16)
+            } catch (e: InterruptedException) {
+                e.printStackTrace()
             }
         }
     }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - joystickCenterX
-                val dy = event.y - joystickCenterY
-                val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+    private fun drawBullet(canvas: Canvas?, bullet: Bullet) {// Код для отрисовки пули (например:
+        canvas?.drawCircle(bullet.x, bullet.y, 10f, paint)
+    }
 
-                // Настройка направления на основе положения джойстика
-                if (distance > joystickRadius) {
-                    joystickStickX = joystickCenterX + (dx / distance * joystickRadius)
-                    joystickStickY = joystickCenterY + (dy / distance * joystickRadius)
-                } else {
-                    joystickStickX = event.x
-                    joystickStickY = event.y
+    @Synchronized
+
+    fun updateBullets() {
+        val currentTime = System.currentTimeMillis()
+        val bulletsToRemove = mutableListOf<Bullet>()
+
+        for (bullet in bullets) {
+            if (currentTime - bullet.creationTime > 2000) {
+                bulletsToRemove.add(bullet)
+            } else {
+                bullet.x += bullet.speedX
+                bullet.y += bullet.speedY
+
+                // Проверка на столкновение с краями экрана
+                if (bullet.x <= 0 || bullet.x >= width) {
+                    bullet.speedX *= -1 // Меняем направление по оси X
                 }
-
-                // Устанавливаем направление движения
-                moveDirectionX = (dx / distance) * playerSpeed
-                moveDirectionY = (dy / distance) * playerSpeed
-            }
-
-            MotionEvent.ACTION_UP -> {
-                joystickStickX = joystickCenterX
-                joystickStickY = joystickCenterY
-
-                // Остановить движение
-                moveDirectionX = 0f
-                moveDirectionY = 0f
+                if (bullet.y <= 0 || bullet.y >= height) {
+                    bullet.speedY *= -1 // Меняем направление по оси Y
+                }
             }
         }
-        return true
+        bullets.removeAll(bulletsToRemove)
     }
 
-    override fun surfaceCreated(holder: SurfaceHolder) {
-        isRunning = true
-        thread = Thread(this)
-        thread.start()
+
+    fun shootBullet(x: Float, y: Float, speedX: Float, speedY: Float) {
+        synchronized(bullets) {
+            bullets.add(Bullet(x, y, speedX, speedY, System.currentTimeMillis()))
+        }
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        // Здесь обычно ничего не делаем
+
+    private fun drawGame() {
+        updateBullets()
+        if (holder.surface.isValid) {
+            val canvas = holder.lockCanvas()
+            canvas.drawColor(Color.BLACK) // Установить черный фон
+
+
+            val centerX = width / 2f
+            val centerY = height / 2f
+
+            val offsetX = -playerX + centerX
+            val offsetY = -playerY + centerY
+
+            gameMap.draw(canvas, offsetX, offsetY)
+
+            // Рисуем вашего игрока
+//            paint.color = playerColor
+//            canvas.drawCircle(centerX, centerY, 20f, paint) // Рисуем вашего игрока как круг
+
+            // Рисуем других игроков
+            paint.color = otherPlayerColor
+            for (otherPlayer in otherPlayerData) {
+                if (otherPlayer.login != globalLogin)
+                    canvas.drawCircle(
+                        otherPlayer.x + offsetX,
+                        otherPlayer.y + offsetY,
+                        40f,
+                        paint
+                    ) // Рисуем других игроков как кружки
+            }
+            for (bullet in bullets) {
+                drawBullet(canvas, bullet)
+            }
+
+            holder.unlockCanvasAndPost(canvas)
+        }
     }
 
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
-        isRunning = false
-        thread.join()
+    // Обновляем данные о других игроках
+    fun updateOtherPlayers(players: List<PlayerData>) {
+        otherPlayerData.clear() // очищаем старые данные
+        otherPlayerData.addAll(players) // добавляем новые данные
     }
 
-    fun stop() {
-        isRunning = false
+
+    fun pause() {
+        isPlaying = false
+        if (::thread.isInitialized) {
+            thread.join()
+        }
+    }
+
+    fun resume() {
+        if (!::thread.isInitialized || !isPlaying) {
+            isPlaying = true
+            thread = Thread(this)
+            thread.start()
+        }
+
+    }
+
+
+    fun updatePlayerPosition(dx: Float, dy: Float) {
+        playerX += dx
+        Log.d("888", "$playerX")
+        playerY += dy
+        Log.d("888", "$playerY")
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        mapTexture.recycle() // Убираем текстуру карты из памяти
     }
 }
+
