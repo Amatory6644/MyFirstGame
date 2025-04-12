@@ -9,79 +9,81 @@ import android.view.MotionEvent
 import android.view.View
 
 class JoystickView(context: Context, attrs: AttributeSet) : View(context, attrs) {
+    private var outerCirclePaint: Paint = Paint()
+    private var innerCirclePaint: Paint = Paint()
+    private var innerCircleRadius = 100f
+    private var outerCircleRadius = 150f
     private var centerX: Float = 0f
     private var centerY: Float = 0f
-    private var radius: Float = 100f
-    private var stickX: Float = centerX
-    private var stickY: Float = centerY
+    var onJoystickMoveListener: ((dx: Float, dy: Float) -> Unit)? = null
 
     init {
-        // Инициализация, установка размеров и т.д.
+        outerCirclePaint.color = Color.LTGRAY
+        outerCirclePaint.style = Paint.Style.FILL
+        innerCirclePaint.color = Color.BLUE
+        innerCirclePaint.style = Paint.Style.FILL
     }
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-
-        // Рисуем джойстик и его палку
-        val paint = Paint().apply {
-
-            color = Color.GRAY
-        }
-        canvas.drawCircle(centerX, centerY, radius, paint)
-
-        paint.color = Color.RED
-        canvas.drawCircle(stickX, stickY, radius / 3, paint)
-    }
-//    override fun onTouchEvent(event: MotionEvent): Boolean {
-//        when (event.action) {
-//            MotionEvent.ACTION_MOVE -> {
-//                val dx = event.x - stickX
-//                val dy = event.y - stickY
-//                val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
-//
-//                // Если джойстик слишком близко к краю, продолжаем движение персонажа
-//                if (distance > joystickRadius) {
-//                    stickX = stickX + (dx / distance * joystickRadius)
-//                    stickY = stickY + (dy / distance * joystickRadius)
-//                    // Позиция игрока обновляется в соответствии с направлением движения
-//                    playerX += (dx / distance * 5) // Скорость движения
-//                    playerY += (dy / distance * 5) // Скорость движения
-//                } else {
-//                    stickX = event.x
-//                    stickY = event.y
-//                    // Также обновляем позицию игрока
-//                    playerX += (dx / 10) // Замените 10 на значение, соответствующее вашей желаемой скорости
-//                    playerY += (dy / 10)
-//                }
-//            }
-//            MotionEvent.ACTION_UP -> {
-//                stickX = stickX
-//                stickY = stickY
-//            }
-//        }
-//        return true
-//    }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.action) {
             MotionEvent.ACTION_MOVE -> {
-                stickX = event.x
-                stickY = event.y
-                invalidate() // Перерисуем вид
-                // Здесь добавьте свою логику движения персонажа
-                // Например:
-                handleMovement()
+                val dx = event.x - centerX
+                val dy = event.y - centerY
+                val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+
+                // Ограничиваем движение внутреннего круга радиусом внешнего круга
+                if (distance < outerCircleRadius) {
+                    innerCircleRadius = distance
+                } else {
+                    innerCircleRadius = outerCircleRadius
+                }
+
+                invalidate()
+                onJoystickMoveListener?.invoke(dx, dy)
             }
             MotionEvent.ACTION_UP -> {
-                stickX = centerX
-                stickY = centerY
+                innerCircleRadius = 0f
                 invalidate()
+                onJoystickMoveListener?.invoke(0f, 0f)
             }
         }
         return true
     }
 
-    private fun handleMovement() {
-        // Логика движения персонажа на основе положения stickX и stickY
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        centerX = width / 2f
+        centerY = height / 2f
+        // Рисуем внешний круг
+        canvas.drawCircle(centerX, centerY, outerCircleRadius, outerCirclePaint)
+        // Рисуем внутренний круг
+        canvas.drawCircle(centerX + innerCircleRadius, centerY + innerCircleRadius, innerCircleRadius, innerCirclePaint)
     }
 }
+
+
+//class JoystickView(context: Context, attrs: AttributeSet) : View(context, attrs) {
+//    private var centerX: Float = 0f
+//    private var centerY: Float = 0f
+//    private var radius: Float = 100f
+//    private var stickX: Float = centerX
+//    private var stickY: Float = centerY
+//
+//    init {
+//        // Инициализация, установка размеров и т.д.
+//    }
+//
+//    override fun onDraw(canvas: Canvas) {
+//        super.onDraw(canvas)
+//
+//        // Рисуем джойстик и его палку
+//        val paint = Paint().apply {
+//
+//            color = Color.GRAY
+//        }
+//        canvas.drawCircle(centerX, centerY, radius, paint)
+//
+//        paint.color = Color.RED
+//        canvas.drawCircle(stickX, stickY, radius / 3, paint)
+//    }
+//}
