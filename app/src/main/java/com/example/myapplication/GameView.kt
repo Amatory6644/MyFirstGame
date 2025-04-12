@@ -1,124 +1,82 @@
 package com.example.myapplication
 
-
 import android.content.Context
-import android.graphics.Canvas
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Paint
-import android.view.MotionEvent
-import android.view.SurfaceHolder
+import android.util.AttributeSet
+import android.util.Log
 import android.view.SurfaceView
 
+class GameView(context: Context, attrs: AttributeSet? = null) : SurfaceView(context, attrs),
+    Runnable {
 
-
-class GameView(context: Context) : SurfaceView(context), Runnable, SurfaceHolder.Callback {
-    private val paint: Paint = Paint()
-    private var isRunning = false
     private lateinit var thread: Thread
-    var playerX = 100f
-    var playerY = 100f
-    var playerSize = 50f
+    private var isPlaying = true
+    private val paint = Paint()
+    private var playerX = 100f // Начальная позиция игрока по X
+    private var playerY = 100f // Начальная позиция игрока по Y
+    private  var playerBitmap: Bitmap? = null
 
-    private var joystickCenterX = 300f
-    private var joystickCenterY = 300f
-    private var joystickRadius = 100f
-    private var joystickStickX = joystickCenterX
-    private var joystickStickY = joystickCenterY
-
-    // Переменные для направления движения
-    private var moveDirectionX = 0f
-    private var moveDirectionY = 0f
-
-    // Фиксированная скорость движения
-    private val playerSpeed = 10f
 
     init {
-        paint.color = Color.WHITE
-        paint.style = Paint.Style.FILL
-        holder.addCallback(this) // Добавляем SurfaceHolder.Callback
+        try {
+            Log.d("6644GameView", "1")
+            playerBitmap = BitmapFactory.decodeResource(resources, R.drawable.background)
+            Log.d("6644GameView", "2")
+            Log.d("6644GameView", "Player bitmap loaded successfully.")
+            if (playerBitmap == null) {
+                Log.e("6644GameView", "playerBitmap is null after decoding")
+            }
+        } catch (e: Exception) {
+            Log.d("6644GameView", "3")
+            Log.e("6644GameView", "Error loading player bitmap: ${e.message}")
+        }
     }
 
     override fun run() {
-        while (isRunning) {
-            update()
-            draw()
+        while (isPlaying) {
+            drawGame()
         }
     }
 
-    private fun update() {
-        // Обновление позиции персонажа в зависимости от направления движения
-        playerX += moveDirectionX
-        playerY += moveDirectionY
-    }
+    private fun drawGame() {
+        Log.d("6644GameView", "4")
 
-    private fun draw() {
-        val canvas: Canvas? = holder.lockCanvas()
-        if (canvas != null) {
-            try {
-                canvas.drawColor(Color.BLACK)
-                canvas.drawRect(playerX, playerY, playerX + playerSize, playerY + playerSize, paint)
+        if (holder.surface.isValid) {
+            Log.d("6644GameView", "5")
+            val canvas = holder.lockCanvas()
+            Log.d("6644GameView", "6")
+            canvas.drawColor(Color.BLACK) // Очистить экран
+            playerBitmap?.let {
+                Log.d("6644GameView", "7")
 
-                // Рисуем джойстик
-                paint.color = Color.GRAY
-                canvas.drawCircle(joystickCenterX, joystickCenterY, joystickRadius, paint)
-
-                paint.color = Color.RED
-                canvas.drawCircle(joystickStickX, joystickStickY, joystickRadius / 3, paint)
-            } finally {
-                holder.unlockCanvasAndPost(canvas)
-            }
+                canvas.drawBitmap(it, playerX, playerY, paint)
+            } ?: Log.e("6644GameView", "playerBitmap is not initialized")
+            Log.d("6644GameView", "8")
+            holder.unlockCanvasAndPost(canvas)
         }
     }
 
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.action) {
-            MotionEvent.ACTION_MOVE -> {
-                val dx = event.x - joystickCenterX
-                val dy = event.y - joystickCenterY
-                val distance = Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+    fun updatePlayerPosition(dx: Float, dy: Float) {
+        playerX += dx
+        playerY += dy
+    }
 
-                // Настройка направления на основе положения джойстика
-                if (distance > joystickRadius) {
-                    joystickStickX = joystickCenterX + (dx / distance * joystickRadius)
-                    joystickStickY = joystickCenterY + (dy / distance * joystickRadius)
-                } else {
-                    joystickStickX = event.x
-                    joystickStickY = event.y
-                }
-
-                // Устанавливаем направление движения
-                moveDirectionX = (dx / distance) * playerSpeed
-                moveDirectionY = (dy / distance) * playerSpeed
-            }
-
-            MotionEvent.ACTION_UP -> {
-                joystickStickX = joystickCenterX
-                joystickStickY = joystickCenterY
-
-                // Остановить движение
-                moveDirectionX = 0f
-                moveDirectionY = 0f
-            }
+    fun pause() {
+        isPlaying = false
+        if (::thread.isInitialized) {
+            thread.join()
         }
-        return true
     }
 
-    override fun surfaceCreated(holder: SurfaceHolder) {
-        isRunning = true
-        thread = Thread(this)
-        thread.start()
-    }
+    fun resume() {
+        if (!::thread.isInitialized || !isPlaying) {
+            isPlaying = true
+            thread = Thread(this)
+            thread.start()
+        }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-        // Здесь обычно ничего не делаем
-    }
-
-    override fun surfaceDestroyed(holder: SurfaceHolder) {
-        isRunning = false
-        thread.join()
-    }
-
-    fun stop() {
-        isRunning = false
     }
 }
