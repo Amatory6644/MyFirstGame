@@ -8,27 +8,49 @@ import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
-import io.ktor.client.HttpClient
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-
+import com.example.myapplication.repository.GameRepository
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 
 class Home : AppCompatActivity() {
-    private lateinit var image1 : ImageView
-    private lateinit var image2 : ImageView
-    private lateinit var image3 : ImageView
-    private lateinit var image4 : ImageView
-    private lateinit var start : Button
-    private lateinit var invite : Button
-    private lateinit var client: HttpClient
-    private var login:String? = null
+    
+    // Получаем PlayerViewModel через Koin для работы с приглашениями
+    private val playerViewModel: PlayerViewModel by inject()
+    private val gameRepository: GameRepository by inject()
+    
+    private lateinit var image1: ImageView
+    private lateinit var image2: ImageView
+    private lateinit var image3: ImageView
+    private lateinit var image4: ImageView
+    private lateinit var start: Button
+    private lateinit var invite: Button
+    private lateinit var groups: Button
+
+    private var login: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_home)
+        
         login = intent.getStringExtra("LOGIN_EXTRA")
-        Toast.makeText(this@Home, "$login",Toast.LENGTH_LONG).show()
+        if (login.isNullOrEmpty()) {
+            Toast.makeText(this@Home, "Ошибка: логин не передан", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
+        
+        Toast.makeText(this@Home, "Добро пожаловать, $login!", Toast.LENGTH_LONG).show()
+        
+        // Устанавливаем логин игрока в ViewModel
+        playerViewModel.setPlayerLogin(login!!)
+        
+        initializeViews()
+        setupClickListeners()
+    }
+    
+    private fun initializeViews() {
         image1 = findViewById(R.id.imageView1)
         image2 = findViewById(R.id.imageView2)
         image3 = findViewById(R.id.imageView3)
@@ -41,63 +63,146 @@ class Home : AppCompatActivity() {
 
         start = findViewById(R.id.play)
         invite = findViewById(R.id.invite)
-
-
-        start.setOnClickListener{
+        groups = findViewById(R.id.groups)
+        
+        // Загружаем информацию о группе игрока
+        loadPlayerGroupInfo()
+    }
+    
+    private fun setupClickListeners() {
+        start.setOnClickListener {
             val intent = Intent(this@Home, MainActivity::class.java)
+            intent.putExtra("LOGIN_EXTRA", login)
             startActivity(intent)
             finish()
-
         }
-        invite.setOnClickListener{
+        
+        invite.setOnClickListener {
             showInviteDialog()
         }
 
-       client = HttpClientProvider.create()
-
-//        connectToWebSoket()
+        groups.setOnClickListener {
+            val intent = Intent(this@Home, GroupsActivity::class.java)
+            intent.putExtra("LOGIN_EXTRA", login)
+            startActivity(intent)
+        }
     }
-    private  fun showInviteDialog(){
+
+    private fun showInviteDialog() {
         val builder = AlertDialog.Builder(this)
         val inflater = layoutInflater
-        val dialogLayout = inflater.inflate(R.layout.dialog_invite,null)
+        val dialogLayout = inflater.inflate(R.layout.dialog_invite, null)
         val playerLoginEditText = dialogLayout.findViewById<TextInputEditText>(R.id.playerLoginEditText)
 
-        builder.setTitle("Invite Player")
-            .setPositiveButton("Send"){dialog, which ->
+        builder.setTitle("Пригласить игрока")
+            .setPositiveButton("Отправить") { dialog, which ->
                 val playerLogin = playerLoginEditText.text.toString()
-                sendInvite(playerLogin)
+                if (playerLogin.isNotEmpty()) {
+                    sendInvite(playerLogin)
+                } else {
+                    Toast.makeText(this, "Введите логин игрока", Toast.LENGTH_SHORT).show()
+                }
             }
-            .setNegativeButton("Cancel"){dialog, which ->
+            .setNegativeButton("Отмена") { dialog, which ->
                 dialog.cancel()
             }
             .setView(dialogLayout)
             .show()
-
-    }
-    private  fun sendInvite(playerLogin:String){
-        val inviteRequest = Json.encodeToString(InviteRequest(login, playerLogin))
-        // Отправляем сообщение через WebSocket.
-        Toast.makeText(this, inviteRequest,Toast.LENGTH_LONG).show()
-
     }
 
-
-
-
-
-
-
-    override fun onPause() {
-        Log.d("888", "onPauseH1")
-
-        super.onPause()
+    private fun sendInvite(playerLogin: String) {
+        lifecycleScope.launch {
+            try {
+                // Проверяем, что login не null
+                val currentLogin = login ?: return@launch
+                
+                // Создаем приглашение в группу (временная группа)
+                val inviteRequest = GroupInviteRequest(
+                    sender = currentLogin,
+                    receivers = listOf(playerLogin),
+                    groupId = "temp_group_${System.currentTimeMillis()}", // Временная группа
+                    message = "Приглашение в игру"
+                )
+                
+                // Отправляем приглашение через Repository
+                val result = gameRepository.sendGroupInvite(inviteRequest)
+                
+                if (result.status == "SUCCESS") {
+                    Toast.makeText(
+                        this@Home, 
+                        "Приглашение отправлено игроку: $playerLogin", 
+                        Toast.LENGTH_LONG
+                    ).show()
+                    
+                    Log.d("Home", "Приглашение отправлено: $inviteRequest")
+                } else {
+                    Toast.makeText(
+                        this@Home, 
+                        "Ошибка отправки приглашения: ${result.message}", 
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                
+            } catch (e: Exception) {
+                Log.e("Home", "Ошибка при отправке приглашения: $e")
+                Toast.makeText(
+                    this@Home, 
+                    "Ошибка при отправке приглашения: ${e.message}", 
+                    Toast.LENGTH_LONG
+                ).show()
+                    }
     }
-
-    override fun onDestroy() {
-        Log.d("888", "onDestroyH1")
-
-        super.onDestroy()
+    
+//    override fun onResume() {
+//        super.onResume()
+//        // Обновляем отображение игроков в группе при возвращении
+//        loadPlayerGroupInfo()
+//    }
+}
+    
+    private fun loadPlayerGroupInfo() {
+        lifecycleScope.launch {
+            try {
+                val currentLogin = login ?: return@launch
+                
+                // Получаем все группы
+                val groups = gameRepository.getAllGroups()
+                
+                // Ищем группу, в которой состоит игрок
+                val playerGroup = groups.find { group ->
+                    group.players.contains(currentLogin)
+                }
+                
+                if (playerGroup != null) {
+                    // Обновляем отображение игроков в группе
+                    updateGroupPlayersDisplay(playerGroup)
+                }
+                
+            } catch (e: Exception) {
+                Log.e("Home", "Ошибка загрузки информации о группе: $e")
+            }
+        }
     }
-
+    
+    private fun updateGroupPlayersDisplay(group: GroupInfo) {
+        val images = listOf(image1, image2, image3, image4)
+        
+        // Сначала все изображения делаем серыми (не в группе)
+        images.forEach { imageView ->
+            imageView.setImageResource(R.drawable.ask)
+        }
+        
+        // Затем обновляем изображения игроков в группе
+        group.players.take(4).forEachIndexed { index, playerLogin ->
+            if (index < images.size) {
+                if (playerLogin == login) {
+                    // Текущий игрок - черный цвет
+                    images[index].setImageResource(R.drawable.player_black)
+                } else {
+                    // Другие игроки - зеленый цвет
+                    images[index].setImageResource(R.drawable.player_green)
+                }
+            }
+        }
+    }
 }

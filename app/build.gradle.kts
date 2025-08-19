@@ -57,6 +57,15 @@ dependencies {
     implementation(libs.kotlinx.serialization.json.v150)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
+    
+    // Ktor Mock Engine для тестирования
+    testImplementation("io.ktor:ktor-client-mock:2.3.7")
+    testImplementation("io.ktor:ktor-client-mock-jvm:2.3.7")
+    val koin_version = "4.0"
+    implementation("io.insert-koin:koin-core:4.0.0")
+    implementation("io.insert-koin:koin-android:4.0.0")
+//    implementation("io.insert-koin:koin-androidx-viewmodel:4.0.0")
+    testImplementation("io.insert-koin:koin-test:4.0.0")
 
     // Если вы используете LibGDX, оставьте эти зависимости
     implementation(libs.gdx)

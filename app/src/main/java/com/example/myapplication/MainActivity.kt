@@ -1,71 +1,139 @@
 package com.example.myapplication
 
-import android.util.Log
 import android.os.Bundle
-import android.widget.Button
+import android.util.Log
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import io.ktor.client.HttpClient
-
+import androidx.lifecycle.lifecycleScope
+import com.example.myapplication.repository.GameRepository
+import com.example.myapplication.ui.ConnectionStatusView
+import com.example.myapplication.ui.LoadingIndicator
+import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var client: HttpClient
+    
+    // Получаем PlayerViewModel через Koin
+    private val playerViewModel: PlayerViewModel by inject()
+    
     private lateinit var joystick: JoystickView
     private lateinit var gameView: GameView
-    val publicLogin = LoginActivite().publicLogin
-    lateinit var playerData: PlayerData
-    private var players = mutableMapOf<Int, PlayerData>()
-
+    private lateinit var connectionStatusView: ConnectionStatusView
+    private lateinit var loadingIndicator: LoadingIndicator
+    
+    // Получаем логин из Intent
+    private var playerLogin: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
         try {
-            setContentView(R.layout.activity_main) // Убедитесь, что у вас есть этот файл
+            setContentView(R.layout.activity_main)
         } catch (e: Exception) {
-            Log.d("888", "Ошибка $e")
-        } finally {
+            Log.e("MainActivity", "Ошибка при установке layout: $e")
+            return
         }
-
-
+        
+        // Получаем логин из Intent
+        playerLogin = intent.getStringExtra("LOGIN_EXTRA") ?: ""
+        if (playerLogin.isEmpty()) {
+            Log.e("MainActivity", "Логин не передан")
+            finish()
+            return
+        }
+        
+        // Инициализируем UI компоненты
         joystick = findViewById(R.id.joystick)
         gameView = findViewById(R.id.game_view)
-
-        client = HttpClientProvider.create()
-
-        playerData = PlayerData(publicLogin, 500f, 500f) // Начальные координаты игрока
-
-
-        var joyDx = 0f
-        var joyDy = 0f
+        connectionStatusView = findViewById(R.id.connection_status)
+        loadingIndicator = findViewById(R.id.loading_indicator)
+        
+        // Устанавливаем LifecycleOwner и PlayerViewModel в GameView
+        gameView.setLifecycleOwner(this)
+        gameView.setPlayerViewModel(playerViewModel)
+        gameView.setCurrentPlayerLogin(playerLogin)
+        
+        // Устанавливаем логин игрока в ViewModel
+        playerViewModel.setPlayerLogin(playerLogin)
+        
+        // Настраиваем джойстик
+        setupJoystick()
+        
+        // Подключаемся к игре
+        connectToGame()
+        
+        // Наблюдаем за состоянием соединения
+        observeConnectionStatus()
+    }
+    
+    private fun setupJoystick() {
         joystick.onJoystickMoveListener = { dx, dy ->
-            gameView.updatePlayerPosition(dx, dy)
-            playerData.x += dx // Применять изменения к данным игрока
-            playerData.y += dy // Обновляем данные о позиции игрока
+            // Обновляем позицию через ViewModel
+            playerViewModel.updatePosition(dx, dy)
         }
-
-
+    }
+    
+    private fun connectToGame() {
+        loadingIndicator.show()
+        lifecycleScope.launch {
+            try {
+                // Подключаемся к игровому серверу
+                playerViewModel.connectToGame("/game")
+                Log.d("MainActivity", "Подключение к игре инициировано")
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Ошибка при подключении к игре: $e")
+                loadingIndicator.hide()
+                Toast.makeText(this@MainActivity, "Ошибка подключения: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    
+    private fun observeConnectionStatus() {
+        lifecycleScope.launch {
+            playerViewModel.connectionStatus.collect { status ->
+                when (status) {
+                    is GameRepository.ConnectionStatus.Connected -> {
+                        Log.d("MainActivity", "Подключено к игровому серверу")
+                        loadingIndicator.hide()
+                        connectionStatusView.updateStatus(status)
+                        Toast.makeText(this@MainActivity, "Подключено к серверу", Toast.LENGTH_SHORT).show()
+                    }
+                    is GameRepository.ConnectionStatus.Disconnected -> {
+                        Log.d("MainActivity", "Отключено от игрового сервера")
+                        loadingIndicator.hide()
+                        connectionStatusView.updateStatus(status)
+                    }
+                    is GameRepository.ConnectionStatus.Error -> {
+                        Log.e("MainActivity", "Ошибка соединения: ${status.message}")
+                        loadingIndicator.hide()
+                        connectionStatusView.updateStatus(status)
+                        Toast.makeText(this@MainActivity, "Ошибка соединения: ${status.message}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        }
+        
+        // Наблюдаем за статусом повторного подключения
+        lifecycleScope.launch {
+            // Здесь можно добавить наблюдение за статусом повторного подключения
+            // если добавить соответствующий Flow в PlayerViewModel
+        }
     }
 
-
-
     override fun onResume() {
-        Log.d("888", "onResume called")
         super.onResume()
         gameView.resume()
     }
 
     override fun onPause() {
-        Log.d("888", "onPause called")
-
         super.onPause()
         gameView.pause()
     }
-
+    
     override fun onDestroy() {
-        Log.d("888", "onDestroy called")
         super.onDestroy()
-        if (::client.isInitialized) {
-            client.close()
-        }
+        // Отключаемся от игры при закрытии Activity
+        playerViewModel.disconnectFromGame()
     }
 }
 
