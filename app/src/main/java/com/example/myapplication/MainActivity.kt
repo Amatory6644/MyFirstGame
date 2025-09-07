@@ -21,8 +21,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connectionStatusView: ConnectionStatusView
     private lateinit var loadingIndicator: LoadingIndicator
     
-    // Получаем логин из Intent
+    // Получаем логин и группу из Intent
     private var playerLogin: String = ""
+    private var groupId: String = "default"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,13 +35,17 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
-        // Получаем логин из Intent
+        // Получаем логин и группу из Intent
         playerLogin = intent.getStringExtra("LOGIN_EXTRA") ?: ""
+        groupId = intent.getStringExtra("GROUP_ID") ?: "default"
+        
         if (playerLogin.isEmpty()) {
             Log.e("MainActivity", "Логин не передан")
             finish()
             return
         }
+        
+        Log.d("MainActivity", "Подключение игрока $playerLogin к группе $groupId")
         
         // Инициализируем UI компоненты
         joystick = findViewById(R.id.joystick)
@@ -77,9 +82,13 @@ class MainActivity : AppCompatActivity() {
         loadingIndicator.show()
         lifecycleScope.launch {
             try {
-                // Подключаемся к игровому серверу
-                playerViewModel.connectToGame("/game")
-                Log.d("MainActivity", "Подключение к игре инициировано")
+                // Подключаемся к игровому серверу с указанием группы
+                val gameRoute = "/game?username=$playerLogin&groupId=$groupId"
+                Log.d("MainActivity", "🔴 ПОДКЛЮЧЕНИЕ К URL: ws://192.168.0.105:8080$gameRoute")
+                Log.d("MainActivity", "🔴 ЛОГИН ИГРОКА: $playerLogin")
+                Log.d("MainActivity", "🔴 ID ГРУППЫ: $groupId")
+                playerViewModel.connectToGame(gameRoute)
+                Log.d("MainActivity", "Подключение к игре инициировано: $gameRoute")
             } catch (e: Exception) {
                 Log.e("MainActivity", "Ошибка при подключении к игре: $e")
                 loadingIndicator.hide()

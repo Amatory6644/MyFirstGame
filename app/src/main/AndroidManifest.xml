@@ -39,6 +39,20 @@
         <activity android:name=".InvitesActivity"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"
             android:exported="false"/>
+        
+        <!-- Сервис для обработки уведомлений о начале игры -->
+        <service android:name=".service.GameNotificationService"
+            android:enabled="true"
+            android:exported="false" />
+        
+        <!-- Receiver для получения уведомлений о начале игры -->
+        <receiver android:name=".receiver.GameStartedReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="GAME_STARTED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

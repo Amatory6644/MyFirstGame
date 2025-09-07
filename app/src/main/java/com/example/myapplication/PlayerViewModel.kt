@@ -29,12 +29,18 @@ class PlayerViewModel(
         // Слушаем обновления от Repository
         viewModelScope.launch {
             gameRepository.playerUpdates.collect { playerData ->
-                _playerData.value = playerData
+                // Получаем данные других игроков от сервера
+                // НЕ обновляем _playerData, так как это данные других игроков
+                gameLogger.log("DEBUG", "PlayerViewModel", "Получены данные игрока от сервера: ${playerData.login}")
             }
         }
         
         viewModelScope.launch {
             gameRepository.otherPlayersUpdates.collect { otherPlayers ->
+                gameLogger.log("DEBUG", "PlayerViewModel", "🟢 ПОЛУЧЕНЫ ДАННЫЕ ДРУГИХ ИГРОКОВ: ${otherPlayers.size} игроков")
+                otherPlayers.forEach { player ->
+                    gameLogger.log("DEBUG", "PlayerViewModel", "Игрок: ${player.login} в позиции (${player.x}, ${player.y})")
+                }
                 _otherPlayers.value = otherPlayers
             }
         }
@@ -45,11 +51,13 @@ class PlayerViewModel(
             }
         }
         
-        // Слушаем обновления позиции от NetworkManager
+        // Слушаем обновления позиции от NetworkManager (локальные обновления)
         viewModelScope.launch {
             networkManager.positionUpdates.collect { playerData ->
-                // Обновляем локальное состояние
-                _playerData.value = playerData
+                // Обновляем локальное состояние только для текущего игрока
+                if (playerData.login == _playerData.value.login) {
+                    _playerData.value = playerData
+                }
             }
         }
     }

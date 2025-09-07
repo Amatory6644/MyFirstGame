@@ -80,6 +80,11 @@ class LoginActivity : AppCompatActivity() {
                                 // Успешный вход - переходим к игре
                                 val login = usernameEditText.text.toString()
                                 publicLogin = login
+                                
+                                // Сохраняем логин в SharedPreferences для использования в BroadcastReceiver
+                                val prefs = getSharedPreferences("game_prefs", MODE_PRIVATE)
+                                prefs.edit().putString("player_login", login).apply()
+                                
                                 val intent = Intent(this@LoginActivity, Home::class.java)
                                 intent.putExtra("LOGIN_EXTRA", login)
                                 startActivity(intent)

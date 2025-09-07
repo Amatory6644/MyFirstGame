@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.textfield.TextInputEditText
 import com.example.myapplication.repository.GameRepository
+import com.example.myapplication.service.GameNotificationService
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 
@@ -48,6 +49,7 @@ class Home : AppCompatActivity() {
         
         initializeViews()
         setupClickListeners()
+        setupWebSocketListener()
     }
     
     private fun initializeViews() {
@@ -71,10 +73,25 @@ class Home : AppCompatActivity() {
     
     private fun setupClickListeners() {
         start.setOnClickListener {
-            val intent = Intent(this@Home, MainActivity::class.java)
-            intent.putExtra("LOGIN_EXTRA", login)
-            startActivity(intent)
-            finish()
+            lifecycleScope.launch {
+                // Получаем текущую группу игрока
+                val currentGroup = getCurrentPlayerGroup()
+                Log.d("Home", "setupClickListeners: currentGroup = $currentGroup")
+                
+                if (currentGroup != null) {
+                    Log.d("Home", "setupClickListeners: groupId = '${currentGroup.groupId}'")
+                    // Если игрок в группе, запускаем игру для всей группы
+                    startGroupGame(currentGroup.groupId)
+                } else {
+                    Log.d("Home", "setupClickListeners: игрок не в группе, запускаем обычную игру")
+                    // Если игрок не в группе, запускаем обычную игру
+                    val intent = Intent(this@Home, MainActivity::class.java)
+                    intent.putExtra("LOGIN_EXTRA", login)
+                    intent.putExtra("GROUP_ID", "default")
+                    startActivity(intent)
+                    finish()
+                }
+            }
         }
         
         invite.setOnClickListener {
@@ -204,5 +221,110 @@ class Home : AppCompatActivity() {
                 }
             }
         }
+    }
+    
+    private suspend fun getCurrentPlayerGroup(): GroupInfo? {
+        val currentLogin = login ?: return null
+        
+        // Получаем все группы и ищем группу игрока
+        return try {
+            val groups = gameRepository.getAllGroups()
+            Log.d("Home", "Поиск группы для игрока: $currentLogin, доступно групп: ${groups.size}")
+            
+            val playerGroup = groups.find { group ->
+                val isPlayerInGroup = group.players.contains(currentLogin)
+                Log.d("Home", "Группа ${group.groupId}: игроки=${group.players}, статус=${group.status}, подходит=${isPlayerInGroup}")
+                isPlayerInGroup // Ищем игрока в любой группе, независимо от статуса
+            }
+            
+            if (playerGroup != null) {
+                Log.d("Home", "Найдена группа игрока: ${playerGroup.groupId}")
+            } else {
+                Log.d("Home", "Группа игрока не найдена")
+            }
+            
+            playerGroup
+        } catch (e: Exception) {
+            Log.e("Home", "Ошибка получения группы игрока: $e")
+            null
+        }
+    }
+    
+    private fun startGroupGame(groupId: String) {
+        lifecycleScope.launch {
+            try {
+                val currentLogin = login ?: return@launch
+                
+                Log.d("Home", "Попытка запуска игры для группы: '$groupId', игрок: $currentLogin")
+                
+                // Проверяем, что groupId не пустой
+                if (groupId.isBlank()) {
+                    Log.e("Home", "groupId пустой!")
+                    Toast.makeText(this@Home, "Ошибка: ID группы не найден", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                
+                // Сначала проверим, что группа существует и игрок в ней
+                val groups = gameRepository.getAllGroups()
+                val currentGroup = groups.find { it.groupId == groupId }
+                
+                if (currentGroup == null) {
+                    Log.e("Home", "Группа $groupId не найдена")
+                    Toast.makeText(this@Home, "Группа не найдена", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                
+                if (!currentGroup.players.contains(currentLogin)) {
+                    Log.e("Home", "Игрок $currentLogin не в группе $groupId")
+                    Toast.makeText(this@Home, "Вы не состоите в этой группе", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                
+                Log.d("Home", "Группа найдена: ${currentGroup.players.size} игроков, статус: ${currentGroup.status}")
+                
+                // Запускаем игру для группы на сервере
+                val success = gameRepository.startGroupGame(groupId)
+                
+                Log.d("Home", "Результат запуска игры: $success")
+                
+                if (success) {
+                    // Переходим к игре с указанием группы
+                    val intent = Intent(this@Home, MainActivity::class.java)
+                    intent.putExtra("LOGIN_EXTRA", currentLogin)
+                    intent.putExtra("GROUP_ID", groupId)
+                    startActivity(intent)
+                    finish()
+                } else {
+                    Toast.makeText(
+                        this@Home,
+                        "Не удалось запустить игру для группы",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                
+            } catch (e: Exception) {
+                Log.e("Home", "Ошибка запуска групповой игры: $e")
+                Toast.makeText(
+                    this@Home,
+                    "Ошибка запуска игры: ${e.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+    
+    private fun setupWebSocketListener() {
+        val currentLogin = login ?: return
+        
+        Log.d("Home", "Запуск сервиса уведомлений для игрока: $currentLogin")
+        
+        // Запускаем сервис для обработки уведомлений
+        val serviceIntent = Intent(this, GameNotificationService::class.java)
+        serviceIntent.action = GameNotificationService.ACTION_START_NOTIFICATIONS
+        serviceIntent.putExtra(GameNotificationService.EXTRA_PLAYER_LOGIN, currentLogin)
+        
+        Log.d("Home", "Отправляем Intent для запуска GameNotificationService")
+        val result = startService(serviceIntent)
+        Log.d("Home", "Результат запуска сервиса: $result")
     }
 }
